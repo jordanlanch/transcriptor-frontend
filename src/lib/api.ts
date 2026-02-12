@@ -1,4 +1,27 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Runtime API URL: fetched from server so Docker env vars work without rebuild
+let _apiUrl: string | null = null;
+
+async function getApiUrl(): Promise<string> {
+  if (_apiUrl) return _apiUrl;
+  // In browser, fetch from our own API route which reads the server env var
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/config");
+      const config = await res.json();
+      _apiUrl = config.apiUrl;
+      return _apiUrl!;
+    } catch {
+      // Fallback if API route fails
+    }
+  }
+  _apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  return _apiUrl;
+}
+
+// Sync getter for XHR (uses cached value or fallback)
+function getApiUrlSync(): string {
+  return _apiUrl || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+}
 
 const TOKEN_KEY = "transcriptor_token";
 
@@ -85,7 +108,8 @@ export class ApiError extends Error {
 // Auth Functions
 
 export async function login(email: string, password: string): Promise<void> {
-  const response = await fetch(`${API_URL}/api/v1/auth/login`, {
+  const apiUrl = await getApiUrl();
+  const response = await fetch(`${apiUrl}/api/v1/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
@@ -115,7 +139,8 @@ export function logout(): void {
 }
 
 export async function getMe(): Promise<User> {
-  const response = await fetch(`${API_URL}/api/v1/auth/me`, {
+  const apiUrl = await getApiUrl();
+  const response = await fetch(`${apiUrl}/api/v1/auth/me`, {
     method: "GET",
     headers: { ...authHeaders() },
   });
@@ -136,6 +161,8 @@ export async function uploadAudio(
   file: File,
   onProgress?: (percent: number) => void
 ): Promise<Job> {
+  // Pre-load API URL so the sync getter works inside the XHR callback
+  await getApiUrl();
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
@@ -196,7 +223,7 @@ export async function uploadAudio(
       reject(new ApiError("Upload aborted"));
     });
 
-    xhr.open("POST", `${API_URL}/api/v1/jobs/upload`);
+    xhr.open("POST", `${getApiUrlSync()}/api/v1/jobs/upload`);
     const token = getToken();
     if (token) {
       xhr.setRequestHeader("Authorization", `Bearer ${token}`);
@@ -206,8 +233,9 @@ export async function uploadAudio(
 }
 
 export async function getJob(id: string): Promise<Job> {
+  const apiUrl = await getApiUrl();
   try {
-    const response = await fetch(`${API_URL}/api/v1/jobs/${id}`, {
+    const response = await fetch(`${apiUrl}/api/v1/jobs/${id}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -240,8 +268,9 @@ export async function getJob(id: string): Promise<Job> {
 }
 
 export async function getJobs(): Promise<Job[]> {
+  const apiUrl = await getApiUrl();
   try {
-    const response = await fetch(`${API_URL}/api/v1/jobs`, {
+    const response = await fetch(`${apiUrl}/api/v1/jobs`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -278,8 +307,9 @@ export async function downloadExport(
   format: ExportFormat
 ): Promise<Blob> {
   try {
+    const apiUrl = await getApiUrl();
     const response = await fetch(
-      `${API_URL}/api/v1/jobs/${jobId}/export/${format}`,
+      `${apiUrl}/api/v1/jobs/${jobId}/export/${format}`,
       {
         method: "GET",
         headers: { ...authHeaders() },
