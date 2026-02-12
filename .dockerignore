@@ -1,0 +1,12 @@
+node_modules
+.next
+.env
+.git
+test-results
+e2e
+coverage
+*.md
+vitest.config.ts
+vitest.setup.ts
+playwright.config.ts
+src/__tests__
